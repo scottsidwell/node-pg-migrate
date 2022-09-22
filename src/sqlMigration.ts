@@ -6,10 +6,15 @@ const { readFile } = fs.promises
 const createMigrationCommentRegex = (direction: 'up' | 'down') =>
   new RegExp(`^\\s*--[\\s-]*${direction}\\s+migration`, 'im') // eslint-disable-line security/detect-non-literal-regexp
 
+const createNoTransactionCommentRegex = () =>
+  new RegExp(`^\\s*--[\\s-]*no\\s*transaction`, 'i') // eslint-disable-line security/detect-non-literal-regexp
+
 export const getActions = (content: string): MigrationBuilderActions => {
+  const noTransactionCommentRegex = createNoTransactionCommentRegex();
   const upMigrationCommentRegex = createMigrationCommentRegex('up')
   const downMigrationCommentRegex = createMigrationCommentRegex('down')
 
+  const noTransaction = content.search(noTransactionCommentRegex) >= 0;
   const upMigrationStart = content.search(upMigrationCommentRegex)
   const downMigrationStart = content.search(downMigrationCommentRegex)
 
@@ -21,10 +26,15 @@ export const getActions = (content: string): MigrationBuilderActions => {
     downMigrationStart >= 0
       ? content.substr(downMigrationStart, upMigrationStart < downMigrationStart ? undefined : upMigrationStart)
       : undefined
-
   return {
-    up: (pgm) => pgm.sql(upSql),
-    down: downSql === undefined ? false : (pgm) => pgm.sql(downSql),
+    up: (pgm) => {
+      noTransaction && pgm.noTransaction();
+      pgm.sql(upSql);
+    },
+    down: downSql === undefined ? false : (pgm) => {
+      noTransaction && pgm.noTransaction();
+      pgm.sql(downSql);
+    }
   }
 }
 
